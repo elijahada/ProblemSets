@@ -1,20 +1,24 @@
 # 6.00 Problem Set 5
 # RSS Feed Filter
+# Name: Elijah Ada
+# Collaborators:
+# Time:
 
-import time
-import string
 import feedparser
-from news_gui import Popup
+import string
+import time
 from project_util import translate_html
-# -----------------------------------------------------------------------
+from news_gui import Popup
+
+#-----------------------------------------------------------------------
 #
 # Problem Set 5
 
-# ======================
+#======================
 # Code for retrieving and parsing
 # Google and Yahoo News feeds
 # Do not change this code
-# ======================
+#======================
 
 def process(url):
     """
@@ -37,17 +41,17 @@ def process(url):
         ret.append(newsStory)
     return ret
 
-
-# ======================
+#======================
 # Part 1
 # Data structure design
-# ======================
+#======================
 
 # Problem 1
 
 # TODO: NewsStory
+
+
 class NewsStory(object):
-    """Common class for all news stories """
     def __init__(self, guid, title, subject, summary, link):
         self.guid = guid
         self.title = title
@@ -70,13 +74,11 @@ class NewsStory(object):
     def get_link(self):
         return self.link
 
-
-
-
-# ======================
+#======================
 # Part 2
 # Triggers
-# ======================
+#======================
+
 
 class Trigger(object):
     def evaluate(self, story):
@@ -91,39 +93,79 @@ class Trigger(object):
 
 # TODO: WordTrigger
 class WordTrigger(Trigger):
-
     def __init__(self, word):
         self.word = word
 
     def is_word_in(self, text):
-        lowercaseText = string.lower(text)
-        lowercaseSelf = string.lower(self)
-        wordsInText = lowercaseText.split("!\"#$%&'()*+,-./:;<=>?@[\]^_`{|}~")
-        return lowercaseSelf in wordsInText()
+        word = self.word.lower()
+        text = text.lower()
+
+        for punc in string.punctuation:
+            text = text.replace(punc, " ")
+        splitText = text.split(" ")
+        return word in splitText
 
 
 # TODO: TitleTrigger
 class TitleTrigger(WordTrigger):
-    def evaluate(self, title):
-        return self.is_word_in(title)
+    def evaluate(self, story):
+        return self.is_word_in(story.get_title())
 
 # TODO: SubjectTrigger
-# TODO: SummaryTrigger
+class SubjectTrigger(WordTrigger):
+    def evaluate(self, story):
+        return self.is_word_in(story.get_subject())
 
+# TODO: SummaryTrigger
+class SummaryTrigger(WordTrigger):
+    def evaluate(self, story):
+        return self.is_word_in(story.get_summary())
 
 # Composite Triggers
 # Problems 6-8
 
 # TODO: NotTrigger
+class NotTrigger(Trigger):
+    def __init__(self, otherTrigger):
+        self.otherTrigger = otherTrigger
+
+
+    def evaluate(self, story):
+        return not self.otherTrigger.evaluate(story)
+
 # TODO: AndTrigger
+class AndTrigger(Trigger):
+    def __init__(self, trigger1, trigger2):
+        self.trigger1 = trigger1
+        self.trigger2 = trigger2
+
+    def evaluate(self, story):
+        return self.trigger1.evaluate(story) and self.trigger2.evaluate(story)
+
 # TODO: OrTrigger
+class OrTrigger(Trigger):
+    def __init__(self, trigger1, trigger2):
+        self.trigger1 = trigger1
+        self.trigger2 = trigger2
+
+    def evaluate(self, story):
+        return self.trigger1.evaluate(story) or self.trigger2.evaluate(story)
+
 
 
 # Phrase Trigger
 # Question 9
 
 # TODO: PhraseTrigger
+class PhraseTrigger(Trigger):
+    def __init__(self, phrase):
+        self.phrase = phrase
 
+    def evaluate(self, story):
+        title = story.get_title()
+        subject = story.get_subject()
+        summary = story.get_summary()
+        return self.phrase in title or self.phrase in subject or self.phrase in summary
 
 # ======================
 # Part 3
@@ -132,20 +174,51 @@ class TitleTrigger(WordTrigger):
 
 def filter_stories(stories, triggerlist):
     """
-    Takes in a list of NewsStory-s.
+    Takes in a list of NewsStories.
     Returns only those stories for whom
     a trigger in triggerlist fires.
     """
     # TODO: Problem 10
-    # This is a placeholder (we're just returning all the stories, with no filtering) 
-    # Feel free to change this line!
-    return stories
+    filtered_stories = []
+    for story in stories:
+        for trigger in triggerlist:
+            if trigger.evaluate(story):
+                filtered_stories.append(story)
+                break
+    return filtered_stories
 
 
 # ======================
 # Part 4
 # User-Specified Triggers
 # ======================
+def createTrigger(trigger_map, trigger_type, parameters, name):
+
+        if trigger_type == "TITLE":
+           trigger = TitleTrigger(parameters[0])
+
+        elif trigger_type == "SUBJECT":
+            trigger = SubjectTrigger(parameters[0])
+
+        elif trigger_type == "SUMMARY":
+            trigger = SummaryTrigger(parameters[0])
+
+        elif trigger_type == "NOT":
+            trigger = TitleTrigger(trigger_map[parameters[0]])
+
+        elif trigger_type == "AND":
+            trigger = AndTrigger(trigger_map[parameters[0]], trigger_map[parameters[1]])
+
+        elif trigger_type == "OR":
+            trigger = OrTrigger(trigger_map[parameters[0]], trigger_map[parameters[1]])
+
+        elif trigger_type == "PHRASE":
+            trigger = PhraseTrigger(" ".join(parameters))
+        else:
+            return None
+
+        trigger_map[name] = trigger
+
 
 def readTriggerConfig(filename):
     """
@@ -159,6 +232,8 @@ def readTriggerConfig(filename):
     triggerfile = open(filename, "r")
     all = [line.rstrip() for line in triggerfile.readlines()]
     lines = []
+    list_of_triggers = []
+    trigger_map = {}
     for line in all:
         if len(line) == 0 or line[0] == '#':
             continue
@@ -168,23 +243,31 @@ def readTriggerConfig(filename):
         # 'lines' has a list of lines you need to parse
         # Build a set of triggers from it and
         # return the appropriate ones
+        # print "lines=", line
+
+    for line in lines:
+        splitline = line.split(" ")
+
+        # adding trigger to list
+        if splitline[0] == "ADD":
+            for potentialTrigs in splitline[1:]:
+                list_of_triggers.append(trigger_map[potentialTrigs])
+        # making new trigger
+        else:
+           trigger = createTrigger(trigger_map, splitline[1], splitline[2:],splitline[0])
+
+    # print "List of Triggers =", list_of_triggers
+    return list_of_triggers
+
 
 
 import thread
 
 
 def main_thread(p):
-    # A sample trigger list - you'll replace
-    # this with something more configurable in Problem 11
-    t1 = SubjectTrigger("Obama")
-    t2 = SummaryTrigger("MIT")
-    t3 = PhraseTrigger("Supreme Court")
-    t4 = OrTrigger(t2, t3)
-    triggerlist = [t1, t4]
 
     # TODO: Problem 11
-    # After implementing readTriggerConfig, uncomment this line 
-    # triggerlist = readTriggerConfig("triggers.txt")
+    triggerlist = readTriggerConfig("triggers.txt")
 
     guidShown = []
 
@@ -202,9 +285,10 @@ def main_thread(p):
         # Don't print a story if we have already printed it before
         newstories = []
         for story in stories:
+            print ". . .",
             if story.get_guid() not in guidShown:
                 newstories.append(story)
-
+        print ". . ."
         for story in newstories:
             guidShown.append(story.get_guid())
             p.newWindow(story)
@@ -212,8 +296,7 @@ def main_thread(p):
         print "Sleeping..."
         time.sleep(SLEEPTIME)
 
-
-SLEEPTIME = 60  # seconds -- how often we poll
+SLEEPTIME = 60 #seconds -- how often we poll
 if __name__ == '__main__':
     p = Popup()
     thread.start_new_thread(main_thread, (p,))
